@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EthnoBridge - Culturally-Aware Healthcare Platform</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-out;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
+    <div id="app" class="max-w-7xl mx-auto p-6"></div>
+
+    <script>
+        // Patient Data
+        const patients = [
+            {
+                id: 'P-402',
+                name: 'Lakshmi Devi',
+                site: 'PHC Raichur (Rural Karnataka)',
+                region: 'South India',
+                village: 'Sindhanur',
+                lastInteraction: new Date(Date.now() - 4 * 60 * 60 * 1000),
+                continuityScore: 45,
+                mutation: 'TCF7L2 rs7903146',
+                mutationRisk: 'High',
+                treatmentArm: 'Metformin + DPP-4i',
+                responses: [
+                    { time: new Date(Date.now() - 24 * 60 * 60 * 1000), question: 'Subah ki dawa li?', answer: 'Haan', latency: 15, sentiment: 0.8 },
+                    { time: new Date(Date.now() - 48 * 60 * 60 * 1000), question: 'Tabiyat kaisi hai?', answer: '4', latency: 30, sentiment: 0.6 }
+                ],
+                alerts: ['High latency detected', 'Low sentiment score']
+            },
+            {
+                id: 'P-156',
+                name: 'Ramesh Kumar',
+                site: 'PHC Raichur (Rural Karnataka)',
+                region: 'South India',
+                village: 'Sindhanur',
+                lastInteraction: new Date(Date.now() - 30 * 60 * 1000),
+                continuityScore: 92,
+                mutation: 'KCNJ11 rs5219',
+                mutationRisk: 'Moderate',
+                treatmentArm: 'Sulfonylurea',
+                responses: [
+                    { time: new Date(Date.now() - 30 * 60 * 1000), question: 'Subah ki dawa li?', answer: 'Haan', latency: 5, sentiment: 0.9 }
+                ],
+                alerts: []
+            },
+            {
+                id: 'P-789',
+                name: 'Priya Singh',
+                site: 'CHC Deoria (Rural Uttar Pradesh)',
+                region: 'North India',
+                village: 'Barhaj',
+                lastInteraction: new Date(Date.now() - 2 * 60 * 60 * 1000),
+                continuityScore: 68,
+                mutation: 'PPARG Pro12Ala',
+                mutationRisk: 'Low',
+                treatmentArm: 'Metformin',
+                responses: [],
+                alerts: ['Declining sentiment trend']
+            },
+            {
+                id: 'P-567',
+                name: 'Fatima Begum',
+                site: 'PHC Bidar (Rural Karnataka)',
+                region: 'South India',
+                village: 'Bhalki',
+                lastInteraction: new Date(Date.now() - 6 * 60 * 60 * 1000),
+                continuityScore: 52,
+                mutation: 'SLC30A8 rs13266634',
+                mutationRisk: 'Moderate',
+                treatmentArm: 'Insulin + Metformin',
+                responses: [],
+                alerts: ['Extended latency', 'Low sentiment', 'ESCALATION: Dropout risk']
+            }
+        ];
+
+        const indianLanguages = [
+            { code: 'hindi', name: 'Hindi - हिंदी' },
+            { code: 'english', name: 'English' },
+            { code: 'bengali', name: 'Bengali - বাংলা' },
+            { code: 'telugu', name: 'Telugu - తెలుగు' },
+            { code: 'tamil', name: 'Tamil - தமிழ்' },
+            { code: 'marathi', name: 'Marathi - मराठी' },
+            { code: 'gujarati', name: 'Gujarati - ગુજરાતી' },
+            { code: 'kannada', name: 'Kannada - ಕನ್ನಡ' },
+            { code: 'malayalam', name: 'Malayalam - മലയാളം' },
+            { code: 'punjabi', name: 'Punjabi - ਪੰਜਾਬੀ' }
+        ];
+
+        const languageMessages = {
+            hindi: { yes: 'Haan', no: 'Nahi', feeling: 'Tabiyat kaisi hai?' },
+            english: { yes: 'Yes', no: 'No', feeling: 'How are you feeling?' },
+            bengali: { yes: 'Haan', no: 'Na', feeling: 'Apni kemon achen?' },
+            telugu: { yes: 'Avunu', no: 'Kaadu', feeling: 'Meeru ela unnaaru?' },
+            tamil: { yes: 'Aamam', no: 'Illai', feeling: 'Epdi irukeenga?' },
+            marathi: { yes: 'Ho', no: 'Nahi', feeling: 'Tumhi kase aahat?' },
+            gujarati: { yes: 'Haa', no: 'Na', feeling: 'Tame kevi rite chho?' },
+            kannada: { yes: 'Haudu', no: 'Illa', feeling: 'Neevu hege iddira?' },
+            malayalam: { yes: 'Aanu', no: 'Alla', feeling: 'Ningalkk engane thonnunnu?' },
+            punjabi: { yes: 'Haan', no: 'Nahi', feeling: 'Tusi kive ho?' }
+        };
+
+        let activeTab = 'dashboard';
+        let selectedLanguage = 'hindi';
+        let messages = [];
+
+        function getScoreColor(score) {
+            if (score >= 80) return 'text-green-600';
+            if (score >= 60) return 'text-yellow-600';
+            return 'text-red-600';
+        }
+
+        function render() {
+            const app = document.getElementById('app');
+            const avgScore = patients.reduce((sum, p) => sum + p.continuityScore, 0) / patients.length;
+            const atRisk = patients.filter(p => p.continuityScore < 70).length;
+            const totalAlerts = patients.reduce((sum, p) => sum + p.alerts.length, 0);
+
+            app.innerHTML = `
+                <!-- Header -->
+                <div class="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl shadow-lg p-8 mb-6 text-white fade-in">
+                    <div class="flex items-center justify-between flex-wrap gap-4">
+                        <div>
+                            <div class="flex items-center gap-3 mb-3">
+                                <div class="w-12 h-12 bg-white rounded-lg flex items-center justify-center">
+                                    <svg class="w-8 h-8 text-indigo-600" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"/>
+                                    </svg>
+                                </div>
+                                <h1 class="text-4xl font-bold">EthnoBridge</h1>
+                            </div>
+                            <p class="text-indigo-100 text-lg">Connecting Communities Through Culturally-Aware Healthcare</p>
+                            <p class="text-indigo-200 text-sm mt-1">Device-Agnostic Patient Engagement for Rural India</p>
+                        </div>
+                        <div class="text-right bg-white/10 rounded-lg p-4 backdrop-blur">
+                            <div class="text-sm text-indigo-100">Study Type</div>
+                            <div class="font-semibold text-lg">Type 2 Diabetes & Hypertension</div>
+                            <div class="text-sm text-indigo-100 mt-2">Active Patients</div>
+                            <div class="text-3xl font-bold">${patients.length}</div>
+                            <div class="text-xs text-indigo-200 mt-2">PHC & CHC Network</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabs -->
+                <div class="bg-white rounded-xl shadow-lg mb-6 overflow-hidden fade-in">
+                    <div class="flex overflow-x-auto">
+                        <button onclick="switchTab('dashboard')" class="flex-1 px-6 py-5 font-semibold whitespace-nowrap transition-all ${activeTab === 'dashboard' ? 'bg-indigo-50 border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500 hover:bg-gray-50'}">
+                            📊 Overview
+                        </button>
+                        <button onclick="switchTab('messages')" class="flex-1 px-6 py-5 font-semibold whitespace-nowrap transition-all ${activeTab === 'messages' ? 'bg-indigo-50 border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500 hover:bg-gray-50'}">
+                            💬 Messages
+                        </button>
+                        <button onclick="switchTab('patients')" class="flex-1 px-6 py-5 font-semibold whitespace-nowrap transition-all ${activeTab === 'patients' ? 'bg-indigo-50 border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500 hover:bg-gray-50'}">
+                            👥 Patients
+                        </button>
+                        <button onclick="switchTab('genetics')" class="flex-1 px-6 py-5 font-semibold whitespace-nowrap transition-all ${activeTab === 'genetics' ? 'bg-indigo-50 border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500 hover:bg-gray-50'}">
+                            🧬 Genetics
+                        </button>
+                        <button onclick="switchTab('services')" class="flex-1 px-6 py-5 font-semibold whitespace-nowrap transition-all ${activeTab === 'services' ? 'bg-indigo-50 border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500 hover:bg-gray-50'}">
+                            🚑 Services
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Content Area -->
+                <div id="content" class="fade-in"></div>
+            `;
+
+            renderContent(avgScore, atRisk, totalAlerts);
+        }
+
+        function renderContent(avgScore, atRisk, totalAlerts) {
+            const content = document.getElementById('content');
+
+            if (activeTab === 'dashboard') {
+                content.innerHTML = `
+                    <!-- Metrics -->
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                        <div class="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform">
+                            <div class="text-4xl font-bold mb-2">${avgScore.toFixed(0)}</div>
+                            <div class="text-indigo-100 text-sm font-medium">Average Engagement Score</div>
+                            <div class="mt-2 text-xs text-indigo-200">Across all patients</div>
+                        </div>
+                        <div class="bg-gradient-to-br from-red-500 to-red-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform">
+                            <div class="text-4xl font-bold mb-2">${atRisk}</div>
+                            <div class="text-red-100 text-sm font-medium">Patients Need Attention</div>
+                            <div class="mt-2 text-xs text-red-200">Score below 70</div>
+                        </div>
+                        <div class="bg-gradient-to-br from-green-500 to-green-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform">
+                            <div class="text-4xl font-bold mb-2">${patients.length}</div>
+                            <div class="text-green-100 text-sm font-medium">Active Participants</div>
+                            <div class="mt-2 text-xs text-green-200">Enrolled in study</div>
+                        </div>
+                        <div class="bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform">
+                            <div class="text-4xl font-bold mb-2">${totalAlerts}</div>
+                            <div class="text-orange-100 text-sm font-medium">Active Alerts</div>
+                            <div class="mt-2 text-xs text-orange-200">Require follow-up</div>
+                        </div>
+                    </div>
+
+                    <!-- Patients List -->
+                    <div class="bg-white rounded-2xl shadow-lg p-8">
+                        <h2 class="text-2xl font-bold text-gray-900 mb-6">Patient Overview</h2>
+                        <div class="space-y-4">
+                            ${patients.map(p => `
+                                <div class="border-2 rounded-xl p-5 hover:shadow-lg transition-shadow ${p.continuityScore < 70 ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-white'}">
+                                    <div class="flex justify-between items-center">
+                                        <div>
+                                            <div class="font-bold text-lg text-gray-900">${p.name}</div>
+                                            <div class="text-sm text-gray-600">${p.id} • ${p.village}</div>
+                                            <div class="text-xs text-gray-500">${p.site}</div>
+                                        </div>
+                                        <div class="${getScoreColor(p.continuityScore)} text-3xl font-bold">
+                                            ${p.continuityScore}
+                                        </div>
+                                    </div>
+                                    ${p.alerts.length > 0 ? `
+                                        <div class="mt-3 pt-3 border-t border-gray-200">
+                                            ${p.alerts.map(alert => `
+                                                <div class="text-xs text-red-700">⚠️ ${alert}</div>
+                                            `).join('')}
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            } else if (activeTab === 'messages') {
+                content.innerHTML = `
+                    <div class="bg-white rounded-2xl shadow-lg p-8">
+                        <div class="flex items-center gap-3 mb-6">
+                            <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                                <span class="text-2xl">💬</span>
+                            </div>
+                            <div>
+                                <h2 class="text-2xl font-bold text-gray-900">WhatsApp Micro-PRO</h2>
+                                <p class="text-sm text-gray-600">Multi-language patient engagement simulator</p>
+                            </div>
+                        </div>
+
+                        <!-- Language Selector -->
+                        <div class="mb-6">
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">🌍 Select Language</label>
+                            <select id="langSelect" onchange="changeLanguage(this.value)" class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                ${indianLanguages.map(lang => `
+                                    <option value="${lang.code}" ${selectedLanguage === lang.code ? 'selected' : ''}>${lang.name}</option>
+                                `).join('')}
+                            </select>
+                        </div>
+
+                        <!-- Message Display -->
+                        <div class="bg-gradient-to-b from-gray-100 to-gray-50 rounded-xl p-6 h-64 overflow-y-auto mb-6 border-2 border-gray-200">
+                            <div class="text-center text-gray-500 text-sm">
+                                Select a language and send a message to simulate patient interaction
+                            </div>
+                        </div>
+
+                        <!-- Response Buttons -->
+                        <div class="space-y-4">
+                            <div class="text-sm font-semibold text-gray-700 mb-3">Patient Response Options:</div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <button class="px-6 py-4 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl hover:from-green-600 hover:to-green-700 font-semibold shadow-md hover:shadow-lg transition-all">
+                                    ✓ ${languageMessages[selectedLanguage].yes}
+                                </button>
+                                <button class="px-6 py-4 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:from-red-600 hover:to-red-700 font-semibold shadow-md hover:shadow-lg transition-all">
+                                    ✗ ${languageMessages[selectedLanguage].no}
+                                </button>
+                            </div>
+                            <div class="text-sm font-semibold text-gray-700 mt-6 mb-3">${languageMessages[selectedLanguage].feeling}:</div>
+                            <div class="grid grid-cols-5 gap-2">
+                                ${['😢 1', '😕 2', '😐 3', '🙂 4', '😊 5'].map((emoji, i) => `
+                                    <button class="px-4 py-4 bg-gradient-to-r ${i < 2 ? 'from-red-400 to-red-500' : i === 2 ? 'from-yellow-400 to-yellow-500' : 'from-green-400 to-green-500'} text-white rounded-xl hover:shadow-lg transition-all font-bold">
+                                        ${emoji}
+                                    </button>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else if (activeTab === 'patients') {
+                content.innerHTML = `
+                    <div class="bg-white rounded-2xl shadow-lg p-8">
+                        <h2 class="text-2xl font-bold text-gray-900 mb-6">👥 Detailed Patient Profiles</h2>
+                        <div class="space-y-6">
+                            ${patients.map(p => `
+                                <div class="border-2 rounded-xl p-6 ${p.continuityScore < 70 ? 'border-red-300 bg-red-50' : 'border-gray-200'}">
+                                    <div class="flex justify-between items-start mb-4">
+                                        <div>
+                                            <div class="font-bold text-xl text-gray-900">${p.name}</div>
+                                            <div class="text-sm text-gray-600">${p.id} • Village: ${p.village}</div>
+                                            <div class="text-sm text-gray-500">${p.site}</div>
+                                        </div>
+                                        <div class="${getScoreColor(p.continuityScore)} text-4xl font-bold">
+                                            ${p.continuityScore}
+                                        </div>
+                                    </div>
+                                    <div class="grid grid-cols-3 gap-4 mt-4">
+                                        <div class="bg-white rounded-lg p-3">
+                                            <div class="text-xs text-gray-500">Last Contact</div>
+                                            <div class="font-semibold text-gray-900">${Math.floor((Date.now() - p.lastInteraction) / (1000 * 60))} min ago</div>
+                                        </div>
+                                        <div class="bg-white rounded-lg p-3">
+                                            <div class="text-xs text-gray-500">Responses</div>
+                                            <div class="font-semibold text-gray-900">${p.responses.length}</div>
+                                        </div>
+                                        <div class="bg-white rounded-lg p-3">
+                                            <div class="text-xs text-gray-500">Region</div>
+                                            <div class="font-semibold text-gray-900">${p.region}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            } else if (activeTab === 'genetics') {
+                content.innerHTML = `
+                    <div class="bg-white rounded-2xl shadow-lg p-8">
+                        <h2 class="text-2xl font-bold text-gray-900 mb-6">🧬 Genetic Mutation Tracking</h2>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                            <div class="bg-red-50 border-l-4 border-red-500 p-4 rounded">
+                                <div class="text-2xl font-bold text-red-700">${patients.filter(p => p.mutationRisk === 'High').length}</div>
+                                <div class="text-sm text-gray-600">High Risk</div>
+                            </div>
+                            <div class="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded">
+                                <div class="text-2xl font-bold text-yellow-700">${patients.filter(p => p.mutationRisk === 'Moderate').length}</div>
+                                <div class="text-sm text-gray-600">Moderate Risk</div>
+                            </div>
+                            <div class="bg-green-50 border-l-4 border-green-500 p-4 rounded">
+                                <div class="text-2xl font-bold text-green-700">${patients.filter(p => p.mutationRisk === 'Low').length}</div>
+                                <div class="text-sm text-gray-600">Low Risk</div>
+                            </div>
+                        </div>
+                        <div class="space-y-3">
+                            ${patients.map(p => `
+                                <div class="border rounded-xl p-5 hover:shadow-md transition-shadow">
+                                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
+                                        <div>
+                                            <div class="font-bold">${p.name}</div>
+                                            <div class="text-xs text-gray-500">${p.village}</div>
+                                        </div>
+                                        <div>
+                                            <div class="text-xs text-gray-500">Genetic Variant</div>
+                                            <div class="font-mono text-sm bg-gray-100 px-2 py-1 rounded">${p.mutation}</div>
+                                        </div>
+                                        <div>
+                                            <span class="px-3 py-1 rounded-full text-xs font-semibold ${
+                                                p.mutationRisk === 'High' ? 'bg-red-100 text-red-700' :
+                                                p.mutationRisk === 'Moderate' ? 'bg-yellow-100 text-yellow-700' :
+                                                'bg-green-100 text-green-700'
+                                            }">${p.mutationRisk}</span>
+                                        </div>
+                                        <div class="text-sm font-semibold text-indigo-600">${p.treatmentArm}</div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            } else if (activeTab === 'services') {
+                content.innerHTML = `
+                    <div class="bg-white rounded-2xl shadow-lg p-8">
+                        <div class="flex justify-between items-center mb-6">
+                            <div>
+                                <h2 class="text-2xl font-bold text-gray-900">🚑 Mobile Health Services</h2>
+                                <p class="text-gray-600">Uber-style logistics for rural healthcare</p>
+                            </div>
+                            <button class="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg font-semibold">
+                                + Request Service
+                            </button>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div class="bg-gradient-to-br from-red-50 to-pink-50 rounded-xl p-6 border-2 border-red-200">
+                                <div class="text-4xl mb-3">🩸</div>
+                                <h3 class="text-lg font-bold text-gray-900 mb-2">Blood Tests</h3>
+                                <p class="text-sm text-gray-600">HbA1c, glucose, lipid panel</p>
+                                <div class="mt-4 text-xs text-gray-500">
+                                    • Home sample collection<br>
+                                    • NABL certified labs<br>
+                                    • WhatsApp reports
+                                </div>
+                            </div>
+                            
+                            <div class="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border-2 border-blue-200">
+                                <div class="text-4xl mb-3">📊</div>
+                                <h3 class="text-lg font-bold text-gray-900 mb-2">Health Monitoring</h3>
+                                <p class="text-sm text-gray-600">BP, glucose, weight tracking</p>
+                                <div class="mt-4 text-xs text-gray-500">
+                                    • Weekly vitals check<br>
+                                    • Real-time data sync<br>
+                                    • Trend analysis
+                                </div>
+                            </div>
+                            
+                            <div class="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-6 border-2 border-green-200">
+                                <div class="text-4xl mb-3">💊</div>
+                                <h3 class="text-lg font-bold text-gray-900 mb-2">Medication Delivery</h3>
+                                <p class="text-sm text-gray-600">Direct-to-home delivery</p>
+                                <div class="mt-4 text-xs text-gray-500">
+                                    • 30-day supply<br>
+                                    • Local language instructions<br>
+                                    • Adherence tracking
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        function switchTab(tab) {
+            activeTab = tab;
+            render();
+        }
+
+        function changeLanguage(lang) {
+            selectedLanguage = lang;
+            render();
+        }
+
+        // Initial render
+        render();
+    </script>
+</body>
+</html>
